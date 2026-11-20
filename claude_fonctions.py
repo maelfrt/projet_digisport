@@ -12,20 +12,25 @@ from scipy.signal import butter, filtfilt
 from scipy.stats import spearmanr
 
 # %% Paramètres (à adapter si besoin)
-DOSSIER = r"C:\Users\Mathi\OneDrive\ENSAI\Digisport\
-    donnees_c3d_biomeca\jeu_donnees_2\liste_fichiers"
+DOSSIER = "/home/onyxia/work/projet_digisport/data2"
 
 ESSAIS = {  # fichier : (position, numéro de capture)
-    "Pos1Cap1.c3d": ("Arrière", 1), "Pos1Cap2.c3d": ("Arrière", 2),
-    "Pos2Cap1.c3d": ("Droit", 1),   "Pos2Cap2.c3d": ("Droit", 2),
-    "Pos3Cap1.c3d": ("Avant", 1),   "Pos3Cap2.c3d": ("Avant", 2),
+    "arriere1_ball_precis.c3d": ("Arrière", 1), "arriere2_ball_precis.c3d": ("Arrière", 2),
+    "droit1_ball_precis.c3d": ("Droit", 1),   "droit2_ball_precis.c3d": ("Droit", 2),
+    "avant1_ball_precis.c3d": ("Avant", 1),   "avant2_ball_precis.c3d": ("Avant", 2),
 }
 ORDRE = ["Arrière", "Droit", "Avant"]
 COULEURS = {"Arrière": "tab:red", "Droit": "tab:green", "Avant": "tab:blue"}
 
+print("Dossier des essais :", DOSSIER)
+print("Contenu du dossier :")
+
+for fichier in os.listdir(DOSSIER):
+    print(fichier)
+
 REF_FILE = None          # ex : "Ref.c3d" (capture anatomique) ; None = pas de référence
 CUTOFF_CORPS = 15        # Hz (corps). Le ballon n'est pas filtré.
-SEUIL_IMPACT = 1.0       # m/s : vitesse du ballon qui définit l'impact
+SEUIL_IMPACT = 4.5      # m/s : vitesse du ballon qui définit l'impact
 N_FRAMES_BALLON = 5      # nb de frames après impact pour la vitesse initiale du ballon
 DIRECTION_BUT = None     # ex : (1, 0) si le but est dans le sens des X+ ; None = auto
 
@@ -53,6 +58,9 @@ def lowpass(x, cutoff, fs, order=2):
 
 def charger_essai(chemin, cutoff=CUTOFF_CORPS):
     """Renvoie (marqueurs corps filtrés en m, ballon en m non filtré, fréquence)."""
+    print("Chemin du fichier :", chemin)
+    print("Fichier existant :", os.path.exists(chemin))
+    print("Chemin absolu :", os.path.abspath(chemin))
     rep = Markers.from_c3d(chemin)
     freq = float(rep.attrs["rate"])
     noms = [str(n) for n in rep.channel.values]
@@ -232,6 +240,7 @@ avant = avant / np.linalg.norm(avant)
 print("\nAxe de tir (x, y) :", np.round(avant, 3))
 
 # %% Référence anatomique (0° du tronc), optionnelle
+
 INCL_REF = 0.0
 if REF_FILE:
     mk_ref, _, _ = charger_essai(os.path.join(DOSSIER, REF_FILE))
