@@ -1,18 +1,3 @@
-# -*- coding: utf-8 -*-
-
-# %%
-# # Angle du genou droit : moyenne par type de mouvement
-#
-# 3 mouvements (arrière / neutre / avant) x 2 captures chacun.
-# Pour chaque capture : angle du genou calibré avec ANAT_REF (comme avant).
-# Puis, pour chaque mouvement : moyenne des 2 captures, et un graphique
-# avec une courbe moyenne par mouvement.
-#
-# Les captures n'ont pas la même durée : on ne peut pas les moyenner image
-# par image. On les ramène donc toutes à une échelle commune
-# "0 -> 100 % du mouvement" avant de faire la moyenne.
-
-# %%
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,9 +10,9 @@ DOSSIER = "projet_digisport/data2/"
 FICHIER_REF = DOSSIER + "ANAT_REF.c3d"
 
 CAPTURES = {
-    "Arrière": ["CAPTURE0002_ballon_v5.c3d", "CAPTURE0004_ballon_v5.c3d"],
-    "Neutre":  ["CAPTURE0005_ballon_v5.c3d", "CAPTURE0007_ballon_v5.c3d"],
-    "Avant":   ["CAPTURE0008_ballon_v5.c3d", "CAPTURE0009_ballon_v5.c3d"],
+    "Arrière": ["arriere1_pas_ball.c3d", "arriere2_pas_ball.c3d"],
+    "Neutre":  ["neutre1_pas_ball.c3d", "neutre2_pas_ball.c3d"],
+    "Avant":   ["avant1_pas_ball.c3d", "avant2_pas_ball.c3d"],
 }
 COULEURS = {"Arrière": "tab:red", "Neutre": "tab:green", "Avant": "tab:blue"}
 NOMS_ANGLES = ["Flexion (+) / extension (-)",
