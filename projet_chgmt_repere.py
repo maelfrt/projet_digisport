@@ -6,10 +6,11 @@ from scipy.spatial.transform import Rotation
 import matplotlib
 print("Backend utilisé :", matplotlib.get_backend())
 
-marqueurs_rom = Markers.from_c3d("projet_digisport/data2/ANAT_REF.c3d")
-marqueurs = Markers.from_c3d("projet_digisport/data2/CAPTURE0002_ballon_v5.c3d")
-temps = np.arange(marqueurs.shape[2]) / marqueurs.attrs["rate"]
-print(marqueurs.channel.values.tolist())
+marqueurs_rom = Markers.from_c3d("data2/ANAT_REF.c3d")
+marqueurs2 = Markers.from_c3d("data2/CAPTURE0002_ballon_v5.c3d")
+mar
+temps = np.arange(marqueurs2.shape[2]) / marqueurs2.attrs["rate"]
+print(marqueurs2.channel.values.tolist())
 
 
 def position(essai, nom):
@@ -24,27 +25,6 @@ def normaliser(v):
 def vers_repere_local(p_global, origine, R):
     return R.T @ (p_global - origine)
 
-"""
-n_frames = rfwt.shape[1]
-lbwt_local = np.zeros((3, n_frames))
-for i in range(n_frames):
-    origine_i, R_i = repere_bassin(rfwt[:, i], lfwt[:, i], rbwt[:, i])
-    lbwt_local[:, i] = vers_repere_local(lbwt[:, i], origine_i, R_i)
-
-print("écart-type de LBWT en local (mm) :", np.round(lbwt_local.std(axis=1), 1))
-
-fig, axes = plt.subplots(1, 2, figsize=(10, 3.5), sharey=True)
-for k, nom in enumerate(["x", "y", "z"]):
-    axes[0].plot(temps, lbwt[k] - lbwt[k, 0], label=nom)
-    axes[1].plot(temps, lbwt_local[k] - lbwt_local[k, 0], label=nom)
-axes[0].set_title("LBWT, repère global")
-axes[1].set_title("LBWT, repère du bassin")
-axes[0].set_ylabel("variation (mm)")
-for ax in axes:
-    ax.set_xlabel("Temps (s)")
-    ax.legend()
-plt.tight_layout()
-plt.show()"""
 
 marqueurs_genou_droit = [
     "genou exterieur droit", "genou interieur droite",
@@ -61,7 +41,7 @@ def compter_nan(essai, noms):   #pour les na
 
 
 print("Vérification NaN - capture :")
-compter_nan(marqueurs, marqueurs_genou_droit)
+compter_nan(marqueurs2, marqueurs_genou_droit)
 print("Vérification NaN - référence :")
 compter_nan(marqueurs_rom, marqueurs_genou_droit)
 
@@ -94,7 +74,7 @@ def angles_genou_droit(essai):
     return angles
 
 
-angles = angles_genou_droit(marqueurs)
+angles2 = angles_genou_droit(marqueurs2)
 
 angles_ref_tous = angles_genou_droit(marqueurs_rom)
 
@@ -105,7 +85,7 @@ vitesse = np.convolve(
 )
 idx_ref = np.nanargmin(vitesse)
 angles_ref = angles_ref_tous[:, idx_ref]
-angles_cal = angles - angles_ref[:, None]
+angles_cal = angles2 - angles_ref[:, None]
 print("angles de référence (deg) :", np.round(angles_ref, 1))
 
 fig, axes = plt.subplots(3, 1, figsize=(8, 7), sharex=True)
@@ -113,7 +93,7 @@ titres = ["Flexion (+) / extension (-)",
           "Abduction (+) / adduction (-)",
           "Rotation interne (+) / externe (-)"]
 for k, couleur in enumerate(["tab:red", "tab:green", "tab:blue"]):
-    axes[k].plot(temps, angles[k], color=couleur, alpha=0.4, label="brut")
+    axes[k].plot(temps, angles2[k], color=couleur, alpha=0.4, label="brut")
     axes[k].plot(temps, angles_cal[k], color=couleur, label="calibré")
     axes[k].set_title(titres[k], fontsize=10)
     axes[k].set_ylabel("deg")
