@@ -1,4 +1,4 @@
-import warnings
+CAPTUREimport warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from pyomeca import Markers
@@ -6,12 +6,12 @@ from scipy.spatial.transform import Rotation
 
 plt.style.use("default")
 
-DOSSIER = "projet_digisport/data2/"
+DOSSIER = "data2/"
 FICHIER_REF = DOSSIER + "ANAT_REF.c3d"
 
 CAPTURES = {
     "Arrière": ["arriere1_pas_ball.c3d", "arriere2_pas_ball.c3d"],
-    "Neutre":  ["neutre1_pas_ball.c3d", "neutre2_pas_ball.c3d"],
+    "Neutre":  ["droit1_pas_ball.c3d", "droit2_pas_ball.c3d"],
     "Avant":   ["avant1_pas_ball.c3d", "avant2_pas_ball.c3d"],
 }
 COULEURS = {"Arrière": "tab:red", "Neutre": "tab:green", "Avant": "tab:blue"}
