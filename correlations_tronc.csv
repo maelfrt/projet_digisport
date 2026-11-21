@@ -1,0 +1,8 @@
+variable,rho_spearman,r_pearson,pente,effet_sur_plage,variation_relative_pct,n
+Instant du pic genou (s avant impact),0.941,0.917,0.001,0.036,142.781,6
+Angle genou à l'impact (°),-0.886,-0.753,-1.516,-43.699,-57.912,6
+Vitesse ballon (m/s),0.829,0.744,0.061,1.753,8.125,6
+Énergie ballon (J),0.829,0.741,0.573,16.529,16.49,6
+Vitesse angulaire pic genou (°/s),0.543,0.134,1.507,43.435,2.324,6
+Vitesse pied (m/s),0.314,-0.155,-0.06,-1.724,-9.886,6
+Rapport ballon/pied,-0.143,0.352,0.01,0.281,21.342,6

@@ -1,0 +1,7 @@
+fichier,mouvement,Inclinaison tronc (°),Vitesse pied (m/s),Vitesse ballon (m/s),Rapport ballon/pied,Énergie ballon (J),Vitesse angulaire pic genou (°/s),Angle genou à l'impact (°),Instant du pic genou (s avant impact)
+arriere1_pas_ball.c3d,Arrière,-16.438,15.281,20.31,1.329,88.687,1807.737,101.402,0.01
+arriere2_pas_ball.c3d,Arrière,-14.896,15.392,21.056,1.368,95.323,1669.505,96.609,0.01
+droit1_pas_ball.c3d,Neutre,-10.913,26.665,21.672,0.813,100.982,2111.375,50.644,0.03
+droit2_pas_ball.c3d,Neutre,-11.165,15.838,21.274,1.343,97.31,1877.893,100.074,0.01
+avant1_pas_ball.c3d,Avant,12.389,19.174,21.609,1.127,100.39,1825.914,50.623,0.05
+avant2_pas_ball.c3d,Avant,10.697,12.261,23.502,1.917,118.751,1922.754,53.396,0.04
