@@ -34,17 +34,30 @@ from scipy.stats import rankdata
 plt.style.use("default")
 
 # ---------------------------------------------------------------- Données
-DOSSIER = "projet_digisport/data2/"
-FICHIER_REF = DOSSIER + "ANAT_REF.c3d"
-print (FICHIER_REF)
 
-# A ADAPTER : recopiez ici votre dictionnaire CAPTURES (noms exacts de vos fichiers)
+from pathlib import Path
+
+# Dossier contenant le script
+BASE_DIR = Path(__file__).resolve().parent
+
+# Dossier contenant les fichiers C3D
+DOSSIER = BASE_DIR / "data2"
+
+# Fichier de référence
+FICHIER_REF = DOSSIER / "ANAT_REF.c3d"
+
 CAPTURES = {
     "Arrière": ["arriere1_pas_ball.c3d", "arriere2_pas_ball.c3d"],
-    "Neutre":  ["droit1_pas_ball.c3d", "droit2_pas_ball.c3d"],
-    "Avant":   ["avant1_pas_ball.c3d", "avant2_pas_ball.c3d"],
+    "Neutre": ["droit1_pas_ball.c3d", "droit2_pas_ball.c3d"],
+    "Avant": ["avant1_pas_ball.c3d", "avant2_pas_ball.c3d"]
 }
+
 COULEURS = {"Arrière": "tab:red", "Neutre": "tab:green", "Avant": "tab:blue"}
+
+# Vérification des chemins
+print("Dossier de travail :", BASE_DIR)
+print("Fichier de référence :", FICHIER_REF)
+print("Fichier existant :", FICHIER_REF.exists())
 
 # ---------------------------------------------------------------- Réglages
 MARQUEUR_PIED = "pied droit"   # pied qui frappe
@@ -276,14 +289,22 @@ def moyenne(a):
 # ## Traitement des captures
 
 def traiter_captures():
-    up = axe_vertical(Markers.from_c3d(FICHIER_REF))
+    if not FICHIER_REF.exists():
+        raise FileNotFoundError(f"Fichier de référence introuvable : {FICHIER_REF}")
+
+    up = axe_vertical(Markers.from_c3d(str(FICHIER_REF)))
     print("Axe vertical détecté (x, y, z) :", up)
 
     captures = []
     for mouvement, fichiers in CAPTURES.items():
         for f in fichiers:
             print(f"{mouvement} - {f}")
-            essai = Markers.from_c3d(DOSSIER + f)
+            chemin_capture = DOSSIER / f
+
+            if not chemin_capture.exists():
+                 raise FileNotFoundError(f"Capture introuvable : {chemin_capture}")
+
+            essai = Markers.from_c3d(str(chemin_capture))
             rate, n = float(essai.attrs["rate"]), essai.shape[2]
             i_imp, ballons = detecter_impact(essai)
             depart, v_ballon = depart_ballon(ballons, i_imp, rate)
