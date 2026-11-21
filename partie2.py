@@ -46,10 +46,15 @@ DOSSIER = BASE_DIR / "data2"
 # Fichier de référence
 FICHIER_REF = DOSSIER / "ANAT_REF.c3d"
 
+# (fichier corps, fichier ballon) pour chaque capture : le ballon est suivi
+# dans les fichiers "*_ball_precis", le corps dans les fichiers "*_pas_ball".
 CAPTURES = {
-    "Arrière": ["arriere1_pas_ball.c3d", "arriere2_pas_ball.c3d"],
-    "Neutre": ["droit1_pas_ball.c3d", "droit2_pas_ball.c3d"],
-    "Avant": ["avant1_pas_ball.c3d", "avant2_pas_ball.c3d"]
+    "Arrière": [("arriere1_pas_ball.c3d", "arriere1_ball_precis.c3d"),
+                ("arriere2_pas_ball.c3d", "arriere2_ball_precis.c3d")],
+    "Neutre":  [("droit1_pas_ball.c3d", "droit1_ball_precis.c3d"),
+                ("droit2_pas_ball.c3d", "droit2_ball_precis.c3d")],
+    "Avant":   [("avant1_pas_ball.c3d", "avant1_ball_precis.c3d"),
+                ("avant2_pas_ball.c3d", "avant2_ball_precis.c3d")],
 }
 
 COULEURS = {"Arrière": "tab:red", "Neutre": "tab:green", "Avant": "tab:blue"}
@@ -95,67 +100,96 @@ def milieu(a, b):
 
 
 def positions_ballon(essai):
-    """Tous les marqueurs du ballon : tableau (n_marqueurs, 3, n_frames)."""
+    """Marqueurs du ballon : tableau (n_marqueurs, 3, n_frames)."""
     noms = list(dict.fromkeys(str(n) for n in essai.channel.values.tolist()))
-    ballons = [n for n in noms if n.lower().startswith("ballon") and "moyenne" not in n.lower()]
+    ballons = [n for n in noms if "ball" in n.lower() and "moyenne" not in n.lower()]
+    ballons = ballons or [n for n in noms if "ball" in n.lower()]
+    if not ballons and len(noms) == 1:
+        ballons = noms
     if not ballons:
-        ballons = [n for n in noms if n.lower().startswith("ballon")]
-    if not ballons:
-        raise KeyError(f"Aucun marqueur de ballon trouvé. Marqueurs du fichier : {noms}")
+        raise KeyError(f"Aucun marqueur de ballon dans ce fichier. Marqueurs trouvés : {noms}")
+    print(f"  marqueurs ballon utilisés : {ballons}")
     return np.stack([position(essai, n) for n in ballons])
 
 
 # %%
 # ## Détection de l'impact
 #
-# - distance pied-ballon = distance du pied au marqueur de ballon le plus proche
-# - le ballon est "parti" quand la médiane des marqueurs ballon s'est éloignée
-#   de plus de SEUIL_BALLON_MM de leur position de départ
-# - impact = image de distance minimale, en ne regardant que jusqu'au départ
-#   du ballon
+# Le ballon vient du fichier "*_ball_precis" (même capture que le fichier corps).
+# - "départ" du ballon = première image où il s'est éloigné de plus de
+#   SEUIL_BALLON_MM de sa position de départ
+# - impact = image où le pied (fichier corps) est le plus proche du ballon,
+#   dans les 0,1 s qui précèdent ce départ
+# Si le ballon ne bouge pas, on s'arrête avec un message : chercher un "minimum"
+# sur toute la capture donnerait un faux impact (et des valeurs absurdes).
 
-def detecter_impact(essai):
-    pied = position(essai, MARQUEUR_PIED)
-    ballons = positions_ballon(essai)                         # (m, 3, n)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        distance = np.nanmin(np.linalg.norm(ballons - pied[None], axis=1), axis=0)
-
-        deplacements = []
-        for b in ballons:
-            valides = np.where(~np.isnan(b).any(axis=0))[0]
-            if len(valides) == 0:
-                continue
+def depart_ballon(ballons):
+    deplacements = []
+    for b in ballons:
+        valides = np.where(~np.isnan(b).any(axis=0))[0]
+        if len(valides):
             depart = np.median(b[:, valides[:20]], axis=1)
             deplacements.append(np.linalg.norm(b - depart[:, None], axis=0))
-        if not deplacements:
-            raise ValueError("Marqueurs du ballon absents sur toute la capture")
+    if not deplacements:
+        raise ValueError("Marqueurs du ballon absents sur toute la capture")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
         deplacement = np.nanmedian(np.stack(deplacements), axis=0)
-
     parti = np.where(deplacement > SEUIL_BALLON_MM)[0]
-    if len(parti) > 0:
-        fenetre = distance[: int(parti[0]) + 1]
-    else:
-        print(f"  ATTENTION : le ballon ne bouge pas de plus de {SEUIL_BALLON_MM} mm, "
-              "recherche du minimum sur toute la capture")
-        fenetre = distance
+    if len(parti) == 0:
+        raise ValueError(f"Le ballon ne bouge pas de plus de {SEUIL_BALLON_MM} mm (frappe non détectée)")
+    return int(parti[0])
+
+
+def detecter_impact(pied, ballons, i_parti, rate):
+    n = min(pied.shape[1], ballons.shape[2])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        distance = np.nanmin(np.linalg.norm(ballons[:, :, :n] - pied[None, :, :n], axis=1), axis=0)
+    debut = max(0, i_parti - int(round(0.1 * rate)))
+    fenetre = distance[debut: i_parti + 1]
     if np.all(np.isnan(fenetre)):
-        raise ValueError("Distance pied-ballon inconnue avant le départ du ballon")
-    return int(np.nanargmin(fenetre)), ballons
+        raise ValueError("Distance pied-ballon inconnue autour de la frappe")
+    return debut + int(np.nanargmin(fenetre))
 
 
-def depart_ballon(ballons, i_imp, rate, nb_max=15):
-    """Déplacement du ballon juste après l'impact : (vecteur en mm, vitesse en m/s)."""
-    for k in range(nb_max, 2, -1):
-        j1 = i_imp + k
-        if j1 >= ballons.shape[2]:
-            continue
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            d = np.nanmedian(ballons[:, :, j1] - ballons[:, :, i_imp], axis=0)
-        if not np.isnan(d).any():
-            return d, np.linalg.norm(d) / (k / rate) / 1000
-    return None, np.nan
+def vitesse_ballon(ballons, i_parti, rate, duree_s=0.06):
+    """Vitesse initiale du ballon : pente de la position sur duree_s après son départ.
+    Retourne (vecteur en m/s, vitesse en m/s)."""
+    nb = max(4, int(round(duree_s * rate)))
+    t = np.arange(nb) / rate
+    pentes = []
+    for b in ballons:
+        seg = b[:, i_parti: i_parti + nb]
+        ok = ~np.isnan(seg).any(axis=0)
+        if ok.sum() >= 3:
+            tt = t[: seg.shape[1]][ok]
+            pentes.append([np.polyfit(tt, seg[k, ok], 1)[0] for k in range(3)])
+    if not pentes:
+        return None, np.nan
+    v = np.median(np.array(pentes), axis=0) / 1000
+    return v, float(np.linalg.norm(v))
+
+
+MARQUEURS_UTILES = ["hanche droite", "hanche gauche", "epaule droite", "epaule gauche",
+                    "genou exterieur droit", "genou interieur droite",
+                    "genou exterieur gauche", "genou interieur gauche",
+                    "cheville droite", "cheville gauche", "pied gauche",
+                    "lombaire gauche", "lombaire droite", "colonne centre", "front"]
+
+
+def signaler_marqueurs_manquants(essai, i_imp, rate):
+    """Affiche les marqueurs qui manquent juste avant l'impact (ils rendent NaN les variables
+    qui en dépendent, et ces captures disparaissent alors des graphiques)."""
+    nb = int(round(FENETRE_IMPACT_S * rate))
+    manquants = []
+    for nom in MARQUEURS_UTILES + [MARQUEUR_PIED]:
+        seg = position(essai, nom)[:, max(0, i_imp - nb): i_imp + 1]
+        part = np.isnan(seg).any(axis=0).mean()
+        if part > 0:
+            manquants.append(f"{nom} ({100 * part:.0f} % des images)")
+    if manquants:
+        print("  ATTENTION : marqueurs manquants juste avant l'impact : " + ", ".join(manquants))
 
 
 # %%
@@ -296,22 +330,31 @@ def traiter_captures():
     print("Axe vertical détecté (x, y, z) :", up)
 
     captures = []
-    for mouvement, fichiers in CAPTURES.items():
-        for f in fichiers:
-            print(f"{mouvement} - {f}")
-            chemin_capture = DOSSIER / f
+    for mouvement, paires in CAPTURES.items():
+        for f_corps, f_ballon in paires:
+            print(f"{mouvement} - {f_corps}")
+            chemin_corps, chemin_ballon = DOSSIER / f_corps, DOSSIER / f_ballon
+            for chemin in (chemin_corps, chemin_ballon):
+                if not chemin.exists():
+                    raise FileNotFoundError(f"Capture introuvable : {chemin}")
 
-            if not chemin_capture.exists():
-                 raise FileNotFoundError(f"Capture introuvable : {chemin_capture}")
+            corps = Markers.from_c3d(str(chemin_corps))
+            balle = Markers.from_c3d(str(chemin_ballon))
+            rate, n = float(corps.attrs["rate"]), corps.shape[2]
+            if abs(float(balle.attrs["rate"]) - rate) > 1e-6 or balle.shape[2] != n:
+                print(f"  ATTENTION : fichiers corps/ballon différents ({n} images à {rate:g} Hz "
+                      f"contre {balle.shape[2]} à {float(balle.attrs['rate']):g} Hz) : "
+                      "synchronisation non garantie")
 
-            essai = Markers.from_c3d(str(chemin_capture))
-            rate, n = float(essai.attrs["rate"]), essai.shape[2]
-            i_imp, ballons = detecter_impact(essai)
-            depart, v_ballon = depart_ballon(ballons, i_imp, rate)
-            droite_bassin = position(essai, "hanche droite")[:, i_imp] - position(essai, "hanche gauche")[:, i_imp]
+            ballons = positions_ballon(balle)
+            i_parti = depart_ballon(ballons)
+            i_imp = detecter_impact(position(corps, MARQUEUR_PIED), ballons, i_parti, rate)
+            depart, v_ballon = vitesse_ballon(ballons, i_parti, rate)
+            droite_bassin = position(corps, "hanche droite")[:, i_imp] - position(corps, "hanche gauche")[:, i_imp]
             avant, source = direction_avant(up, depart, droite_bassin)
-            tronc, variables = calculer_variables(essai, up, avant, rate)
-            captures.append(dict(mouvement=mouvement, fichier=f, rate=rate, n=n, i_imp=i_imp,
+            tronc, variables = calculer_variables(corps, up, avant, rate)
+            signaler_marqueurs_manquants(corps, i_imp, rate)
+            captures.append(dict(mouvement=mouvement, fichier=f_corps, rate=rate, n=n, i_imp=i_imp,
                                  v_ballon=v_ballon, tronc_brut=tronc, variables=variables))
             print(f"  impact à {i_imp / rate:.2f} s | direction avant : {source} | "
                   f"vitesse ballon : {v_ballon:.1f} m/s")
@@ -445,16 +488,23 @@ def tracer_nuages(captures, tableau_a, fichier=None):
     nb_lig = int(np.ceil(len(noms) / nb_col))
     fig, axes = plt.subplots(nb_lig, nb_col, figsize=(3.6 * nb_col, 2.9 * nb_lig), facecolor="white")
     axes = np.atleast_1d(axes).ravel()
+    marge = 0.05 * (np.nanmax(x) - np.nanmin(x))
     for ax, nom in zip(axes, noms):
         y = np.array([c["impact"][nom] for c in captures])
         for xi, yi, c in zip(x, y, captures):
             ax.scatter(xi, yi, color=COULEURS[c["mouvement"]], s=40)
+        ax.set_xlim(np.nanmin(x) - marge, np.nanmax(x) + marge)      # même axe x pour tous
         ok = ~np.isnan(x) & ~np.isnan(y)
         if ok.sum() >= 3:
             a, b = np.polyfit(x[ok], y[ok], 1)
             xx = np.array([x[ok].min(), x[ok].max()])
             ax.plot(xx, a * xx + b, color="grey", linestyle="--", linewidth=1)
-        ax.set_title(f"{nom}\nρ = {tableau_a.loc[nom, 'rho_spearman']:+.2f}", fontsize=9)
+        n_ok = int(tableau_a.loc[nom, "n"])
+        incomplet = n_ok < len(captures)
+        titre = f"{nom}\nρ = {tableau_a.loc[nom, 'rho_spearman']:+.2f}"
+        if incomplet:
+            titre += f"  (seulement {n_ok}/{len(captures)} captures)"
+        ax.set_title(titre, fontsize=9, color="tab:red" if incomplet else "black")
         ax.tick_params(labelsize=8)
     for ax in axes[len(noms):]:
         ax.axis("off")
@@ -520,6 +570,10 @@ if __name__ == "__main__":
     resultats = tableau_a.join(tableau_b, how="left").sort_values("score", ascending=False)
     print("\nVariables classées par lien avec l'inclinaison du tronc (analyse A) :")
     print(resultats.round(2).to_string())
+    incompletes = resultats[resultats["n"] < len(captures)]
+    if len(incompletes):
+        print("\nATTENTION : variables calculées sur moins de captures (données manquantes) :")
+        print(incompletes[["n"]].to_string())
     print("\nLes 3 variables les plus liées à l'inclinaison du tronc :")
     for nom, l in resultats.head(3).iterrows():
         print(f"  - {nom} : rho = {l['rho_spearman']:+.2f}, {l['pente']:+.2f} par degré de tronc "
