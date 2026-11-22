@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import warnings
 from pathlib import Path
 import numpy as np
