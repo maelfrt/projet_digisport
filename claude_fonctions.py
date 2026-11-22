@@ -28,7 +28,7 @@ print("Contenu du dossier :")
 for fichier in os.listdir(DOSSIER):
     print(fichier)
 
-
+REF_FILE = None  
 CUTOFF_CORPS = 15        # Hz (corps). Le ballon n'est pas filtré.
 SEUIL_IMPACT = 4.5      # m/s : vitesse du ballon qui définit l'impact
 N_FRAMES_BALLON = 5      # nb de frames après impact pour la vitesse initiale du ballon
