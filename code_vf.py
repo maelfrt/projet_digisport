@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import warnings
 from pathlib import Path
 import numpy as np
@@ -250,10 +251,11 @@ def traiter_captures(ref, angles_ref):
             avant = direction_avant(up, vitesse_ballon(ballons, i_parti, rate), droite)
             tronc = inclinaison_tronc(corps, up, avant)
 
-            flexion = (angles_genou_droit(corps) - angles_ref[:, None])[0]
+            angles_cal = angles_genou_droit(corps) - angles_ref[:, None]
+            flexion = angles_cal[0]
             nb_i = int(round(FENETRE_IMPACT_S * rate))
             captures.append(dict(mouvement=mouvement, fichier=f_corps, rate=rate, n=n,
-                                 i_imp=i_imp, i_parti=i_parti, distance=distance,
+                                 i_imp=i_imp, i_parti=i_parti, distance=distance, angles=angles_cal,
                                  vit_pied=vitesse_marqueur(pied, rate),
                                  omega=derivee(flexion, rate, angle=True),
                                  tronc_impact=moyenne(tronc[max(0, i_imp - nb_i): i_imp + 1])))
@@ -267,6 +269,24 @@ def traiter_captures(ref, angles_ref):
         c["g_pied"] = sur_grille(t_rel, c["vit_pied"], grille)
         c["g_omega"] = sur_grille(t_rel, c["omega"], grille)
     return grille, captures
+
+
+def moyennes_angles(captures):
+    rate = max(c["rate"] for c in captures)
+    avant_s = min(c["i_imp"] / c["rate"] for c in captures)
+    apres_s = max((c["n"] - 1 - c["i_imp"]) / c["rate"] for c in captures)
+    grille = np.arange(-int(np.floor(avant_s * rate)), int(np.ceil(apres_s * rate)) + 1) / rate
+    moyennes = {}
+    for mouvement in CAPTURES:
+        courbes = []
+        for c in captures:
+            if c["mouvement"] == mouvement:
+                t_rel = (np.arange(c["n"]) - c["i_imp"]) / c["rate"]
+                courbes.append(np.array([sur_grille(t_rel, a, grille) for a in c["angles"]]))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            moyennes[mouvement] = np.nanmean(np.stack(courbes), axis=0)
+    return grille, moyennes
 
 
 def _enregistrer(fig, fichier):
@@ -320,6 +340,19 @@ def tracer_controle_impact(captures, grille, fichier):
     _enregistrer(fig, fichier)
 
 
+def tracer_moyennes(grille, moyennes, fichier, composante=0):
+    fig, ax = plt.subplots(figsize=(9, 5), facecolor="white")
+    for mouvement, couleur in COULEURS.items():
+        ax.plot(grille, moyennes[mouvement][composante], color=couleur, linewidth=2.5,
+                label=f"{mouvement} (moyenne)")
+    ax.axvline(0, color="black", linewidth=1, linestyle="--")
+    ax.axhline(0, color="black", linewidth=0.5, linestyle=":")
+    ax.set_xlabel("Temps par rapport à la frappe (s)")
+    ax.set_ylabel("deg")
+    ax.legend()
+    _enregistrer(fig, fichier)
+
+
 def tracer_profils(grille, captures, fichier):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7), sharex=True, facecolor="white")
     for mouvement, couleur in COULEURS.items():
@@ -354,4 +387,6 @@ if __name__ == "__main__":
 
     grille, captures = traiter_captures(ref, angles_ref)
     tracer_controle_impact(captures, grille, "controle_impact.png")
+    grille_angles, moyennes = moyennes_angles(captures)
+    tracer_moyennes(grille_angles, moyennes, "moyenne_flexion_alignee_frappe.png")
     tracer_profils(grille, captures, "fig1_profils_pied_genou.png")
