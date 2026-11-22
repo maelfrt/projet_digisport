@@ -234,7 +234,6 @@ for ax, (fichier, d) in zip(axes.flat, essais.items()):
     ax.set_xlabel("Temps (s)")
 axes[0, 0].set_ylabel("Vitesse ballon (m/s)")
 axes[1, 0].set_ylabel("Vitesse ballon (m/s)")
-fig.suptitle("Détection du moment du tir ")
 plt.tight_layout()
 plt.savefig(os.path.join(DOSSIER, "fig_controle_impact.png"), dpi=150)
 plt.show()
@@ -292,7 +291,6 @@ plt.plot(t_ref, incl_tir, label="inclinaison (axe de tir)", alpha=0.6)
 plt.scatter(t_ref[stable], incl_face[stable], s=6, color="k", label="images stables")
 plt.axhline(INCL_REF, color="r", ls="--")
 plt.xlabel("Temps (s)"); plt.ylabel("Inclinaison (°)"); plt.legend()
-plt.title("Position anatomique de référence")
 plt.savefig(os.path.join(DOSSIER, "fig_reference_anatomique.png"), dpi=150)
 plt.show()
 
@@ -426,11 +424,6 @@ for ax, var in zip(axes.flat, variables_fig):
 for ax in axes.flat[len(variables_fig):]:
     ax.axis("off")
 
-    fig.suptitle(
-        "Comparaison des paramètres biomécaniques selon la position du tronc",
-        fontsize=14
-    )
-
     plt.tight_layout()
     plt.savefig(os.path.join(DOSSIER, "fig_variables_par_position.png"), dpi=150)
     plt.show()
@@ -441,7 +434,6 @@ for ax in axes.flat[len(variables_fig):]:
     ax.set_title(var)
 for ax in axes.flat[len(variables_fig):]:
     ax.axis("off")
-fig.suptitle("Impact de l'inclinaison sur différents paramettres")
 plt.tight_layout()
 plt.savefig(os.path.join(DOSSIER, "fig_variables_par_position.png"), dpi=150)
 plt.show()
@@ -478,7 +470,6 @@ axes[1].set_ylabel("Rotation du bassin (°)")
 axes[2].set_ylabel("Angle du genou droit (°)")
 axes[2].set_xlabel("Temps par rapport à l'impact (s)")
 axes[0].legend(ncol=3)
-fig.suptitle("Cinématique autour de l'impact (trait plein = capture 1, tirets = capture 2)")
 plt.tight_layout()
 plt.savefig(os.path.join(DOSSIER, "fig_courbes_impact.png"), dpi=150)
 plt.show()
