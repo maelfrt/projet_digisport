@@ -221,11 +221,20 @@ for ax, (fichier, d) in zip(axes.flat, essais.items()):
     ax.plot(t, d["vit"], ".-")
     ax.plot(t[d["imp"]], d["vit"][d["imp"]], "rx", ms=12, mew=2)
     ax.axhline(SEUIL_IMPACT, color="gray", ls=":")
-    ax.set_title(fichier)
+    NOMS_ESSAIS = {
+    "droit2_ball_precis.c3d": "Droit C2",
+    "droit1_ball_precis.c3d": "Droit C1",
+    "arriere1_ball_precis.c3d": "Arrière C1",
+    "arriere2_ball_precis.c3d": "Arrière C2",
+    "avant2_ball_precis.c3d": "Avant C2",
+    "avant1_ball_precis.c3d": "Avant C1"
+    } 
+
+    ax.set_title(NOMS_ESSAIS.get(fichier, fichier)) 
     ax.set_xlabel("Temps (s)")
 axes[0, 0].set_ylabel("Vitesse ballon (m/s)")
 axes[1, 0].set_ylabel("Vitesse ballon (m/s)")
-fig.suptitle("Contrôle de la détection de l'impact (croix rouge) - À VÉRIFIER pour chaque essai")
+fig.suptitle("Détection du moment du tir ")
 plt.tight_layout()
 plt.savefig(os.path.join(DOSSIER, "fig_controle_impact.png"), dpi=150)
 plt.show()
@@ -312,30 +321,80 @@ paires = [("incl_impact", "elevation"), ("incl_impact", "v_ballon"),
           ("incl_impact", "v_pied"), ("incl_impact", "appui_AP_cm"),
           ("appui_AP_cm", "elevation"), ("v_pied", "v_ballon"),
           ("incl_impact", "rapport_v_ballon_pied")]
-print("\n--- Corrélations de Spearman (exploratoire, n =", len(df), ") ---")
-for x, y in paires:
-    s = df[[x, y]].dropna()
-    if len(s) >= 4:
-        rho, _ = spearmanr(s[x], s[y])
-        print(f"rho({x}, {y}) = {rho:.2f}  (n = {len(s)})")
-    else:
-        print(f"rho({x}, {y}) : pas assez de données")
 
 # %% Figure : variables clés par position (points individuels + moyenne)
-variables_fig = ["incl_impact", "v_ballon", "elevation", "v_pied",
-                 "appui_AP_cm", "appui_lat_cm", "angle_genou_impact", "vang_ext_genou",
-                 "rot_bassin_impact", "rapport_v_ballon_pied"]
-fig, axes = plt.subplots(3, 4, figsize=(18, 11))
+
+variables_fig = [
+        "incl_impact", "v_ballon", "elevation", "v_pied",
+        "appui_AP_cm", "appui_lat_cm", "angle_genou_impact",
+        "vang_ext_genou", "rot_bassin_impact", "rapport_v_ballon_pied"
+    ]
+
+# Correspondance entre les noms des variables et les titres des graphiques
+NOMS_VARIABLES = {
+    "incl_impact": "Inclinaison du tronc à l'impact (°)",
+    "v_ballon": "Vitesse initiale du ballon (m/s)",
+    "elevation": "Angle d'élévation du ballon (°)",
+    "v_pied": "Vitesse maximale du pied avant l'impact (m/s)",
+    "appui_AP_cm": "Position avant-arrière du pied d'appui (cm)",
+    "appui_lat_cm": "Position latérale du pied d'appui (cm)",
+    "angle_genou_impact": "Angle du genou droit à l'impact (°)",
+    "vang_ext_genou": "Vitesse angulaire d'extension du genou (°/s)",
+    "rot_bassin_impact": "Rotation du bassin à l'impact (°)",
+    "rapport_v_ballon_pied": "Rapport vitesse ballon / vitesse pied"
+    }
+
+fig, axes = plt.subplots(3, 4, figsize=(20, 12))
+
 for ax, var in zip(axes.flat, variables_fig):
-    sns.stripplot(x="position", y=var, data=df, order=ORDRE, ax=ax,
-                  color="black", size=9)
+
+        sns.stripplot(
+            x="position",
+            y=var,
+            data=df,
+            order=ORDRE,
+            ax=ax,
+            color="black",
+            size=9
+        )
+
+    # Calcul de la moyenne pour chaque position
+        m = df.groupby("position")[var].mean().reindex(ORDRE)
+
+    # Affichage de la moyenne en rouge
+        ax.scatter(
+            range(len(ORDRE)),
+            m.values,
+            marker="_",
+            s=900,
+            color="red",
+            zorder=3,
+            label="Moyenne"
+        )
+
+        ax.set_xlabel("Position du tronc")
+        ax.set_ylabel("")
+        ax.set_title(NOMS_VARIABLES[var], fontsize=10)
+
+for ax in axes.flat[len(variables_fig):]:
+    ax.axis("off")
+
+    fig.suptitle(
+        "Comparaison des paramètres biomécaniques selon la position du tronc",
+        fontsize=14
+    )
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(DOSSIER, "fig_variables_par_position.png"), dpi=150)
+    plt.show()
+
     m = df.groupby("position")[var].mean().reindex(ORDRE)
     ax.scatter(range(len(ORDRE)), m.values, marker="_", s=900, color="red", zorder=3)
     ax.set_xlabel("Position du dos")
     ax.set_title(var)
 for ax in axes.flat[len(variables_fig):]:
     ax.axis("off")
-fig.suptitle("Variables par position (noir = essais, rouge = moyenne)")
+fig.suptitle("Impact de l'inclinaison sur différents paramettres")
 plt.tight_layout()
 plt.savefig(os.path.join(DOSSIER, "fig_variables_par_position.png"), dpi=150)
 plt.show()
