@@ -28,7 +28,7 @@ print("Contenu du dossier :")
 for fichier in os.listdir(DOSSIER):
     print(fichier)
 
-REF_FILE = None          # ex : "Ref.c3d" (capture anatomique) ; None = pas de référence
+
 CUTOFF_CORPS = 15        # Hz (corps). Le ballon n'est pas filtré.
 SEUIL_IMPACT = 4.5      # m/s : vitesse du ballon qui définit l'impact
 N_FRAMES_BALLON = 5      # nb de frames après impact pour la vitesse initiale du ballon
@@ -249,6 +249,53 @@ avant = avant / np.linalg.norm(avant)
 print("\nAxe de tir (x, y) :", np.round(avant, 3))
 
 # %% Référence anatomique (0° du tronc), optionnelle
+# %% Référence anatomique : inclinaison moyenne du tronc en position debout
+REF_FILE = "ANAT_REF.c3d"
+
+mk_ref, _, freq_ref = charger_essai(os.path.join(DOSSIER, REF_FILE))
+bassin_ref = centre(mk_ref, BAS_TRONC)
+epaule_ref = centre(mk_ref, HAUT_TRONC)
+
+# 1) Direction de face du sujet dans la capture de référence
+#    (perpendiculaire à l'axe hanche droite -> hanche gauche, dans le plan horizontal)
+v_hanches = np.mean(mk_ref["hanche gauche"] - mk_ref["hanche droite"], axis=1)
+gauche_ref = v_hanches[:2] / np.linalg.norm(v_hanches[:2])
+face_ref = np.array([gauche_ref[1], -gauche_ref[0]])      # même convention que 'avant'
+
+# 2) Inclinaison au cours de la capture, projetée sur deux axes :
+#    - face_ref : direction réelle de face du sujet (référence anatomique)
+#    - avant    : axe de tir utilisé dans les essais
+incl_face = inclinaison_tronc(bassin_ref, epaule_ref, face_ref)
+incl_tir = inclinaison_tronc(bassin_ref, epaule_ref, avant)
+
+# 3) Ne garder que la phase où le sujet est immobile (le début et la fin
+#    de la capture contiennent souvent des mouvements)
+vit_tronc = np.linalg.norm(np.gradient(epaule_ref, axis=1), axis=0) * freq_ref   # m/s
+stable = vit_tronc < 0.05                                                         # < 5 cm/s
+
+print(f"Capture de référence : {len(incl_face)} images, {stable.sum()} images stables")
+print(f"Angle entre la face du sujet et l'axe de tir : "
+      f"{np.degrees(np.arccos(np.clip(face_ref @ avant, -1, 1))):.1f}°")
+print(f"Inclinaison de face (moyenne ± écart-type) : "
+      f"{incl_face[stable].mean():.1f} ± {incl_face[stable].std():.1f}°")
+print(f"Inclinaison projetée sur l'axe de tir      : "
+      f"{incl_tir[stable].mean():.1f} ± {incl_tir[stable].std():.1f}°")
+
+INCL_REF = float(np.median(incl_face[stable]))
+print(f"\nINCL_REF retenu : {INCL_REF:.1f}°")
+
+# Contrôle visuel
+t_ref = np.arange(len(incl_face)) / freq_ref
+plt.figure(figsize=(8, 3.5))
+plt.plot(t_ref, incl_face, label="inclinaison (face du sujet)")
+plt.plot(t_ref, incl_tir, label="inclinaison (axe de tir)", alpha=0.6)
+plt.scatter(t_ref[stable], incl_face[stable], s=6, color="k", label="images stables")
+plt.axhline(INCL_REF, color="r", ls="--")
+plt.xlabel("Temps (s)"); plt.ylabel("Inclinaison (°)"); plt.legend()
+plt.title("Position anatomique de référence")
+plt.savefig(os.path.join(DOSSIER, "fig_reference_anatomique.png"), dpi=150)
+plt.show()
+
 
 INCL_REF = 0.0
 if REF_FILE:
