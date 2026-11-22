@@ -75,7 +75,14 @@ FENETRE_OMEGA_S = 0.30            # pic de vitesse angulaire cherché dans les 0
 FENETRE_IMPACT_S = 0.05           # "valeur à l'impact" = moyenne sur les 0,05 s avant l'impact
 TROU_MAX_S = 0.05                 # un trou de données plus court que ça est comblé
 FENETRE_AVANT_S, FENETRE_APRES_S = 0.6, 0.1   # fenêtre des courbes (autour de l'impact)
-R_CRITIQUE = 0.81                 # |r| minimal pour être significatif (p < 0,05) avec 6 points
+R_CRITIQUE = 0.81                 # |r| de Pearson minimal pour être significatif (p < 0,05) avec 6 points
+# Valeurs critiques du rho de Spearman (test bilatéral, p < 0,05) selon le nombre de captures valides.
+# Avec 4 captures ou moins, aucune corrélation ne peut être significative.
+SEUILS_SPEARMAN = {5: 1.0, 6: 0.886, 7: 0.786, 8: 0.738}
+
+
+def seuil_spearman(n):
+    return SEUILS_SPEARMAN.get(n, 0.7 if n > 8 else np.inf)
 
 
 # %%
@@ -371,6 +378,10 @@ def traiter_captures():
                 omega_pic = seg_o[k]
                 t_pic = (max(0, i_imp - nb_o) + k - i_imp) / rate
 
+            if not np.isnan(t_pic) and (-t_pic >= FENETRE_OMEGA_S - 1.5 / rate or -t_pic <= 1.5 / rate):
+                print(f"  ATTENTION : le pic de vitesse du genou ({-t_pic:.2f} s avant l'impact) est au bord "
+                      f"de la fenêtre de recherche (0 à {FENETRE_OMEGA_S:g} s) : le vrai pic est peut-être en dehors")
+
             v_pied = float(np.nanmax(vit_pied[max(0, i_imp - nb_p): i_imp + 1])) \
                 if not np.all(np.isnan(vit_pied[max(0, i_imp - nb_p): i_imp + 1])) else np.nan
 
@@ -436,6 +447,8 @@ def correlations_tronc(captures):
         y = np.array([c["metriques"][nom] for c in captures])
         ok = ~np.isnan(x) & ~np.isnan(y)
         if ok.sum() < 4 or np.std(y[ok]) == 0:
+            lignes.append(dict(variable=nom, rho_spearman=np.nan, r_pearson=np.nan, pente=np.nan,
+                               effet_sur_plage=np.nan, variation_relative_pct=np.nan, n=int(ok.sum())))
             continue
         xs, ys = x[ok], y[ok]
         pente = np.polyfit(xs, ys, 1)[0]
@@ -446,6 +459,37 @@ def correlations_tronc(captures):
                            variation_relative_pct=100 * pente * (xs.max() - xs.min()) / abs(ys.mean()),
                            n=int(ok.sum())))
     return pd.DataFrame(lignes).set_index("variable")
+
+
+# Grandeurs liées par une simple formule : leur corrélation est automatique, on ne les compare pas.
+DERIVEES = {"Rapport ballon/pied": {"Vitesse ballon (m/s)", "Vitesse pied (m/s)", "Énergie ballon (J)", "Rendement (%)"},
+            "Rendement (%)": {"Énergie ballon (J)", "Vitesse pied (m/s)", "Rapport ballon/pied", "Vitesse ballon (m/s)"},
+            "Énergie ballon (J)": {"Vitesse ballon (m/s)"}}
+
+
+def _liees(a, b):
+    return b in DERIVEES.get(a, ()) or a in DERIVEES.get(b, ())
+
+
+def correlations_entre_metriques(captures, nb_max=6):
+    """Paires de grandeurs (hors tronc) dont la corrélation est significative (p < 0,05) :
+    liste de (a, b, rho, n), les plus fortes d'abord."""
+    noms = list(captures[0]["metriques"])
+    paires = []
+    for i, a in enumerate(noms):
+        for b in noms[i + 1:]:
+            if _liees(a, b):
+                continue
+            ya = np.array([c["metriques"][a] for c in captures])
+            yb = np.array([c["metriques"][b] for c in captures])
+            ok = ~np.isnan(ya) & ~np.isnan(yb)
+            if ok.sum() < 4 or np.std(ya[ok]) == 0 or np.std(yb[ok]) == 0:
+                continue
+            rho = np.corrcoef(rankdata(ya[ok]), rankdata(yb[ok]))[0, 1]
+            if abs(rho) >= seuil_spearman(int(ok.sum())) - 1e-9:
+                paires.append((abs(rho), a, b, rho, int(ok.sum())))
+    paires.sort(reverse=True)
+    return [(a, b, rho, n) for _, a, b, rho, n in paires[:nb_max]]
 
 
 def matrice_chaine(tableau):
@@ -536,31 +580,76 @@ def tracer_transfert(captures, fichier=None):
     _enregistrer(fig, fichier)
 
 
+PRECISIONS_AXE = {
+    "Instant du pic genou (s avant impact)": "secondes avant l'impact\n(0 = pic au moment de l'impact)",
+    "Vitesse angulaire pic genou (°/s)": "valeur absolue du pic (°/s)",
+}
+
+
+def _nuage(ax, x, y, captures, titre, xlabel, ylabel, fort=False, incomplet=False):
+    for xi, yi, c in zip(x, y, captures):
+        ax.scatter(xi, yi, color=COULEURS[c["mouvement"]], s=45, zorder=3)
+    ok = ~np.isnan(x) & ~np.isnan(y)
+    if ok.sum() >= 3 and np.std(x[ok]) > 0:
+        a, b = np.polyfit(x[ok], y[ok], 1)
+        xx = np.array([x[ok].min(), x[ok].max()])
+        ax.plot(xx, a * xx + b, color="grey", linestyle="--", linewidth=1)
+    ax.set_title(titre, fontsize=9, color="tab:red" if incomplet else "black",
+                 fontweight="bold" if fort else "normal")
+    ax.set_xlabel(xlabel, fontsize=7)
+    ax.set_ylabel(ylabel, fontsize=7)
+    ax.tick_params(labelsize=8)
+    if fort:                                       # cadre orange = forte corrélation
+        for sp in ax.spines.values():
+            sp.set_edgecolor("darkorange")
+            sp.set_linewidth(3)
+
+
 def tracer_nuages(captures, tableau_cor, fichier=None):
-    """Figure 3 : chaque grandeur en fonction de l'inclinaison du tronc."""
-    noms = list(tableau_cor.index)
+    """Figure 3 : chaque grandeur en fonction de l'inclinaison du tronc, classées de la plus à la
+    moins corrélée (cadre orange = forte corrélation). En dessous : les autres fortes
+    corrélations entre grandeurs (hors tronc)."""
+    noms = list(tableau_cor.sort_values("rho_spearman", key=lambda s: s.abs().fillna(-1),
+                                        ascending=False).index)
     x = np.array([c["tronc_impact"] for c in captures])
+    paires = correlations_entre_metriques(captures)
     nb_col = 3
-    nb_lig = int(np.ceil(len(noms) / nb_col))
-    fig, axes = plt.subplots(nb_lig, nb_col, figsize=(4.2 * nb_col, 3.2 * nb_lig), facecolor="white")
-    axes = np.atleast_1d(axes).ravel()
-    for ax, nom in zip(axes, noms):
+    l_tronc = int(np.ceil(len(noms) / nb_col))
+    l_paires = int(np.ceil(len(paires) / nb_col)) if paires else 0
+    hauteurs = [1] * l_tronc + ([0.2] + [1] * l_paires if paires else [])
+    fig = plt.figure(figsize=(4.6 * nb_col, 3.4 * (l_tronc + l_paires) + 1), facecolor="white")
+    gs = fig.add_gridspec(len(hauteurs), nb_col, height_ratios=hauteurs, hspace=0.75, wspace=0.35)
+    marge = 0.05 * (np.nanmax(x) - np.nanmin(x))
+
+    premier = None
+    for i, nom in enumerate(noms):
+        ax = fig.add_subplot(gs[i // nb_col, i % nb_col])
+        premier = premier or ax
         y = np.array([c["metriques"][nom] for c in captures])
-        for xi, yi, c in zip(x, y, captures):
-            ax.scatter(xi, yi, color=COULEURS[c["mouvement"]], s=45)
-        ok = ~np.isnan(x) & ~np.isnan(y)
-        if ok.sum() >= 3:
-            a, b = np.polyfit(x[ok], y[ok], 1)
-            xx = np.array([x[ok].min(), x[ok].max()])
-            ax.plot(xx, a * xx + b, color="grey", linestyle="--", linewidth=1)
-        ax.set_title(f"{nom}\nρ = {tableau_cor.loc[nom, 'rho_spearman']:+.2f}", fontsize=9)
-        ax.tick_params(labelsize=8)
-    for ax in axes[len(noms):]:
-        ax.axis("off")
+        rho, n_ok = tableau_cor.loc[nom, "rho_spearman"], int(tableau_cor.loc[nom, "n"])
+        incomplet = n_ok < len(captures)
+        titre = nom + ("\ndonnées insuffisantes" if np.isnan(rho) else f"\nρ = {rho:+.2f}")
+        if incomplet:
+            titre += f"  (seulement {n_ok}/{len(captures)} captures)"
+        _nuage(ax, x, y, captures, titre, "Inclinaison du tronc (°)", PRECISIONS_AXE.get(nom, ""),
+               fort=(not np.isnan(rho) and abs(rho) >= seuil_spearman(n_ok) - 1e-9), incomplet=incomplet)
+        ax.set_xlim(np.nanmin(x) - marge, np.nanmax(x) + marge)
     for m, couleur in COULEURS.items():
-        axes[0].scatter([], [], color=couleur, label=m)
-    axes[0].legend(fontsize=7)
-    fig.supxlabel("Inclinaison du tronc à l'impact (°, + = vers l'avant)")
+        premier.scatter([], [], color=couleur, label=m)
+    premier.legend(fontsize=7)
+
+    if paires:
+        ax_t = fig.add_subplot(gs[l_tronc, :])
+        ax_t.axis("off")
+        ax_t.text(0.5, 0.2, "Autres corrélations fortes entre grandeurs (hors tronc)",
+                  ha="center", fontsize=11, fontweight="bold")
+        for i, (a, b, rho, n_ok) in enumerate(paires):
+            ax = fig.add_subplot(gs[l_tronc + 1 + i // nb_col, i % nb_col])
+            ya = np.array([c["metriques"][a] for c in captures])
+            yb = np.array([c["metriques"][b] for c in captures])
+            _nuage(ax, ya, yb, captures, f"{b}\nen fonction de {a}\nρ = {rho:+.2f}", a, b, fort=True)
+    fig.suptitle("Grandeurs mesurées à l'impact (cadre orange : corrélation significative, p < 0,05, "
+                 "soit |ρ| ≥ 0,89 avec 6 captures)", fontsize=11)
     _enregistrer(fig, fichier)
 
 
@@ -601,6 +690,11 @@ if __name__ == "__main__":
     print(f"\nAvec seulement {len(captures)} captures, il faut |r| > {R_CRITIQUE} pour un lien "
           "statistiquement significatif ; en dessous, lisez les résultats comme des tendances.")
     cor.round(3).to_csv("correlations_tronc.csv")
+    paires = correlations_entre_metriques(captures)
+    if paires:
+        print("\nAutres corrélations fortes entre grandeurs (hors tronc) :")
+        for a, b, rho, n in paires:
+            print(f"  {a}  <->  {b} : rho = {rho:+.2f} (n = {n})")
 
     tracer_profils(grille, captures, "fig1_profils_pied_genou.png")
     tracer_transfert(captures, "fig2_transfert_pied_ballon.png")
